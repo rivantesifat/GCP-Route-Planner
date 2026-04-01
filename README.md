@@ -13,8 +13,8 @@ A road-network-aware routing tool for Ground Control Point (GCP) survey planning
 ![Computed routes exported as a shapefile and rendered in QGIS](with_routes.png)
 
 <p align="center">
-![QGIS attribute table showing the 18 output route features](Attribute_Table.png)
-**Attribute table — one row per daily route**
+  <b>Attribute Table — Daily Clusters</b><br>
+  <img src="Attribute_Table.png" width="400"/>
 </p>
 ---
 
