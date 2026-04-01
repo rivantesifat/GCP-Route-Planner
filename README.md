@@ -7,13 +7,13 @@ A road-network-aware routing tool for Ground Control Point (GCP) survey planning
 ## Results
 
 **Input — GCP locations across the survey area**
-![GCP locations overlaid on satellite imagery](assets/GCPs_Only.png)
+![GCP locations overlaid on satellite imagery](GCPs_Only.png)
 
 **Output — Optimised daily routes following the road network**
-![Computed routes exported as a shapefile and rendered in QGIS](assets/with_routes.png)
+![Computed routes exported as a shapefile and rendered in QGIS](with_routes.png)
 
 **Attribute table — one row per daily route**
-![QGIS attribute table showing the 18 output route features](assets/Attribute_Table.png)
+![QGIS attribute table showing the 18 output route features](Attribute_Table.png)
 
 ---
 
