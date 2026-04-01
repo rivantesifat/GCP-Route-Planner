@@ -8,11 +8,11 @@ A road-network-aware routing tool for Ground Control Point (GCP) survey planning
 
 <p align="center">
   <b>Input — GCP locations across the survey area</b><br>
-  <img src="GCPs_Only.png" width="400"/>
+  <img src="GCPs_Only.png" width="900"/>
 </p>
 <p align="center">
   <b>Output — Optimised daily routes following the road network</b><br>
-  <img src="with_routes.png" width="400"/>
+  <img src="with_routes.png" width="900"/>
 </p>
 <p align="center">
   <b>Attribute Table — Daily Clusters</b><br>
