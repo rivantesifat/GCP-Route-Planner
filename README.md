@@ -18,7 +18,6 @@ A road-network-aware routing tool for Ground Control Point (GCP) survey planning
   <b>Attribute Table — Daily Clusters</b><br>
   <img src="Attribute_Table.png" width="400"/>
 </p>
----
 
 ## Overview
 
