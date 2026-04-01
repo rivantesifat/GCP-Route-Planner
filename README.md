@@ -4,6 +4,19 @@ A road-network-aware routing tool for Ground Control Point (GCP) survey planning
 
 ---
 
+## Results
+
+**Input — GCP locations across the survey area**
+![GCP locations overlaid on satellite imagery](assets/GCPs_Only.png)
+
+**Output — Optimised daily routes following the road network**
+![Computed routes exported as a shapefile and rendered in QGIS](assets/with_routes.png)
+
+**Attribute table — one row per daily route**
+![QGIS attribute table showing the 18 output route features](assets/Attribute_Table.png)
+
+---
+
 ## Overview
 
 Surveying large areas with GCPs requires careful logistical planning — teams must visit dozens (or hundreds) of points across real road networks while minimising travel time and avoiding impractically long daily drives. This tool automates that planning end-to-end: it reads a road network and a set of GCP locations, builds a routable graph, groups GCPs into feasible daily clusters, solves an optimal visit order for each day's cluster, and exports the resulting routes as a shapefile ready for use in QGIS or any GIS platform.
