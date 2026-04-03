@@ -1,97 +1,57 @@
-# GCP Route Planner — Technical Report
+# GCP Route Planner
 
-A road-network-aware routing tool for Ground Control Point (GCP) survey planning, built in Python using GeoPandas, NetworkX, OR-Tools, and scikit-learn.
-
----
-
-## Results
-
-<p align="center">
-  <b>Input — GCP locations across the survey area</b><br>
-  <img src="GCPs_Only.png" width="900"/>
-</p>
-<p align="center">
-  <b>Output — Optimised daily routes following the road network</b><br>
-  <img src="with_routes.png" width="900"/>
-</p>
-<p align="center">
-  <b>Attribute Table — Daily Clusters</b><br>
-  <img src="Attribute_Table.png" width="400"/>
-</p>
-
-## Overview
-
-Surveying large areas with GCPs requires careful logistical planning — teams must visit dozens (or hundreds) of points across real road networks while minimising travel time and avoiding impractically long daily drives. This tool automates that planning end-to-end: it reads a road network and a set of GCP locations, builds a routable graph, groups GCPs into feasible daily clusters, solves an optimal visit order for each day's cluster, and exports the resulting routes as a shapefile ready for use in QGIS or any GIS platform.
+A road-network-aware routing tool for **Ground Control Point (GCP) survey field planning**, used in active photogrammetric survey operations. Given a set of GCP locations, a road network, and one or two base hotels, the tool automatically clusters GCPs into daily survey routes and solves an optimal visitation sequence for each day using the Travelling Salesman Problem (TSP).
 
 ---
 
-## Pipeline Architecture
+## How It Works
 
-The pipeline is implemented as a single class, `GCPRoutePlanner`, and runs in seven sequential steps.
+The pipeline runs in nine sequential steps:
 
 ```
-Road Network (.shp) ──┐
-                       ├──► Filter Roads ──► Build Graph ──► Snap GCPs ──► Repair ──► Distance Matrix ──► Cluster ──► TSP Solve ──► Export (.shp)
-GCP Points (.shp)  ──┘
+Road network (.shp)  ──┐
+GCP locations (.shp)  ──┤──► Filter roads ──► Build graph ──► Snap GCPs/Hotels
+Hotel locations (.shp) ──┘
+                                                                      │
+                              ┌───────────────────────────────────────┘
+                              ▼
+                    Assign GCPs to hotels ──► Compute distance matrix
+                              │
+                              ▼
+                    Cluster GCPs into days (K-Means + distance budget)
+                              │
+                              ▼
+                    Solve TSP per day (OR-Tools)
+                              │
+                              ▼
+                    Export road-following routes (.shp)
 ```
 
-### Step 1 — Road Filtering
-
-Only road types relevant to survey access are retained. The allowed types cover the full spectrum of navigable ways including motorways, primary and secondary roads, tracks (grades 1–4), footpaths, bridleways, and service roads. Filtering is done against a configurable `fclass` field, making it straightforward to adapt to different OpenStreetMap-derived datasets.
-
-### Step 2 — Graph Construction
-
-The filtered road geometries are converted into a weighted undirected graph using NetworkX. Each edge in the graph corresponds to a segment between two consecutive coordinate pairs along a LineString, with the edge weight set to the Euclidean distance between those coordinates (in the native CRS of the dataset). MultiLineString geometries are decomposed into their constituent LineStrings before processing.
-
-### Step 3 — GCP Snapping
-
-Each GCP point is projected onto the nearest road geometry using Shapely's `project` / `interpolate` pattern, which finds the closest point along the line rather than just the closest vertex. A maximum snap distance threshold (500 m by default) rejects GCPs that are too remote from any road. Snapped nodes that don't already exist in the graph are connected to their nearest existing node by a direct bridging edge.
-
-### Step 4 — Connectivity Repair
-
-After snapping, a dedicated repair pass identifies any GCP node that ended up outside the largest connected component of the graph and force-connects it to the nearest node that is inside that component. This guarantees that shortest-path queries will succeed for all GCPs, even in fragmented road networks.
-
-### Step 5 — Distance Matrix
-
-A full N×N road-network distance matrix is computed for all GCP nodes using NetworkX's `shortest_path_length` with edge weights. Pairs with no connecting path receive a large penalty value (10⁶ m) rather than raising an exception, keeping the matrix dense and solver-compatible.
-
-### Step 6 — Daily Clustering
-
-GCPs are grouped into daily work clusters using K-Means on their spatial coordinates. The number of clusters `k` is estimated from the average straight-line inter-GCP distance relative to the `max_distance_per_day` parameter (default 30 km). A post-processing pass iterates up to 10 times to dissolve any cluster with fewer than 2 GCPs, reassigning isolated points to the nearest cluster by network distance.
-
-### Step 7 — TSP Routing
-
-Each daily cluster is solved as a Travelling Salesman Problem using Google OR-Tools (`pywrapcp`). The solver uses the PATH_CHEAPEST_ARC first-solution strategy on the sub-matrix of network distances for that cluster's GCPs. The resulting node visit order is then expanded back through the full road graph using `nx.shortest_path` to produce a continuous, road-following polyline, which is exported as a GeoDataFrame.
+1. **Filter roads** — retains only traversable road types (primary, secondary, track, path, etc.)
+2. **Build graph** — constructs a weighted NetworkX graph from road segment vertices
+3. **Load hotels** — accepts shapefile paths or raw coordinates; snaps to nearest road node
+4. **Snap GCPs** — projects each GCP onto the nearest road geometry; discards GCPs > 500 m from any road
+5. **Repair disconnected nodes** — reconnects isolated graph components to the largest connected component
+6. **Assign GCPs to hotels** — each GCP is assigned to the closer hotel by road network distance (falls back to straight-line if no path exists)
+7. **Cluster GCPs** — K-Means clustering per hotel zone, with cluster count estimated from a daily distance budget; farthest clusters scheduled first; tiny clusters dissolved by proximity
+8. **Solve routes** — OR-Tools TSP solver (`PATH_CHEAPEST_ARC`) per day, with hotel as depot
+9. **Export routes** — road-following polylines exported as a shapefile with `day`, `hotel`, and `round_trip_km` attributes
 
 ---
 
-## Key Design Decisions
+## Installation
 
-**Snap-then-repair, not reject.** Rather than discarding GCPs that land outside the main connected component after snapping, the tool attempts to bridge them. This is important in rural areas where road networks are fragmented.
+```bash
+pip install geopandas networkx shapely scikit-learn ortools scipy
+```
 
-**Straight-line distances for cluster sizing, network distances for routing.** K-Means clustering uses geographic coordinates because network distances inflate inter-point estimates unpredictably, leading to over-clustering. Once clusters are formed, the full network distance matrix governs the TSP solve.
-
-**Closure-safe distance callbacks.** The OR-Tools distance callback captures the sub-matrix by value via a default argument (`m=sub_matrix`) rather than by closure reference. This avoids a subtle bug where all callbacks in a loop would reference the same (final) matrix.
-
-**0-based index alignment.** After snapping, the GCP GeoDataFrame index is reset to be 0-based and contiguous. This ensures that the distance matrix row/column indices stay aligned with the GeoDataFrame integer index used throughout routing and export.
-
----
-
-## Dependencies
-
-| Package | Role |
-|---|---|
-| `geopandas` | Spatial data I/O and geometry operations |
-| `networkx` | Road graph construction and shortest-path queries |
-| `shapely` | Point snapping, LineString construction |
-| `scikit-learn` | K-Means clustering |
-| `ortools` | TSP solver (Constraint Programming / VRP) |
-| `numpy` | Distance matrix and array operations |
-| `scipy` | KDTree (available for spatial lookups); `cdist` for cluster-size estimation |
+> **Note:** If using inside QGIS, these libraries must be installed into QGIS's Python environment. Use the OSGeo4W shell or QGIS's built-in Python console with `pip`.
 
 ---
 
 ## Usage
+
+### As a standalone Python script
 
 ```python
 from route_core import GCPRoutePlanner
@@ -102,31 +62,129 @@ planner = GCPRoutePlanner(
 )
 
 planner.filter_roads(
-    allowed_types=["primary", "secondary", "track", "path", ...],
+    allowed_types=[
+        "primary", "secondary", "tertiary", "trunk", "trunk_link",
+        "primary_link", "secondary_link", "residential", "unclassified",
+        "living_street", "service", "track", "track_grade1", "track_grade2",
+        "track_grade3", "track_grade4", "path", "pedestrian", "steps",
+        "bridleway", "busway", "motorway"
+    ],
     type_field="fclass"
 )
 
 planner.build_graph()
+
+planner.load_hotels(
+    sources=["data/hotels/hotel_a.shp", "data/hotels/hotel_b.shp"],
+    labels=["Hotel A", "Hotel B"]
+)
+
 planner.snap_gcps()
 planner.repair_disconnected_nodes()
 planner.compute_distance_matrix()
-planner.cluster_gcps(max_distance_per_day=30000)  # metres
+
+planner.assign_gcps_to_hotels()
+planner.cluster_gcps(max_distance_per_day=30000)  # 30 km daily budget
+
 planner.solve_routes()
-planner.export_routes("data/output_routes.shp")
+planner.export_routes("data/results/output_routes.shp")
 ```
+
+### Parameters
+
+| Parameter | Description |
+|---|---|
+| `road_path` | Path to road network shapefile |
+| `gcp_path` | Path to GCP point shapefile |
+| `allowed_types` | List of road type strings to retain (matched against `type_field`) |
+| `type_field` | Attribute field name in the road shapefile containing road type (e.g. `"fclass"`) |
+| `sources` | List of hotel shapefiles or `(x, y)` coordinate tuples |
+| `labels` | Display names for each hotel (e.g. `["Hotel A", "Hotel B"]`) |
+| `max_distance_per_day` | Maximum daily travel distance in metres (used to estimate cluster count) |
+| `output_path` | Output shapefile path for exported routes |
 
 ---
 
 ## Output
 
-The exported shapefile contains one LineString feature per daily cluster. Each feature carries a `day` attribute (integer cluster label) and follows real road geometry between consecutive GCPs. The file can be loaded directly in QGIS, ArcGIS, or any GIS tool for field team navigation.
+The exported shapefile contains one feature per survey day with the following attributes:
+
+| Field | Type | Description |
+|---|---|---|
+| `day` | Integer | Survey day number (0-indexed) |
+| `hotel` | String | Base hotel for that day |
+| `round_trip_km` | Float | Total road-following round trip distance in kilometres |
+| `geometry` | LineString | Full road-following route (hotel → GCPs → hotel) |
+
+Load directly into QGIS for field navigation.
 
 ---
 
-## Known Limitations and Future Work
+## Project Structure
 
-- **CRS assumption.** Edge weights are computed as Euclidean distances in the dataset's native CRS. For geographic (degree-based) CRS, distances will be in degrees rather than metres. Reprojecting to a local metric CRS before running is strongly recommended.
-- **Undirected graph.** The graph does not currently model one-way roads. Adding directed edges for one-way streets would improve route realism in urban areas.
-- **Single vehicle per day.** The TSP solver assumes one team per daily cluster. Extending to a VRP formulation would support multi-team deployments.
-- **Static snap threshold.** The 500 m maximum snap distance is hard-coded. Exposing this as a parameter would make the tool more adaptable to different data densities.
-- **Scalability.** The O(N²) distance matrix computation becomes a bottleneck for large GCP sets. A sparse approximation (e.g., computing only k-nearest-neighbour distances) would significantly speed up large surveys.
+```
+gcp-route-planner/
+│
+├── route_core.py          # GCPRoutePlanner class — full pipeline
+├── test_run.py            # Example usage script
+├── data/
+│   ├── roads.shp          # Road network (OSM or equivalent)
+│   ├── gcps.shp           # GCP point locations
+│   ├── hotels/
+│   │   ├── hotel_a.shp
+│   │   └── hotel_b.shp
+│   └── results/
+│       └── output_routes.shp
+└── README.md
+```
+
+---
+
+## Key Design Decisions
+
+**Road-network snapping** — GCPs and hotels are snapped to the nearest point on the road geometry using Shapely's `project`/`interpolate` pattern, rather than to the nearest graph node. This avoids large position errors in areas with long road segments.
+
+**Connectivity repair** — After snapping, any GCP node not in the largest connected component is stitched to its nearest node in that component. This prevents `NetworkXNoPath` failures in fragmented OSM networks.
+
+**Hotel-first assignment** — GCPs are partitioned between hotels by road distance before clustering. This means each hotel's cluster is spatially coherent and avoids cross-hotel routing inefficiencies.
+
+**Daily budget estimation** — The number of K-Means clusters (survey days) is estimated from the ratio of `max_distance_per_day` to the average pairwise spatial distance among GCPs in each hotel zone, with a minimum of 2 clusters.
+
+**Farthest-first scheduling** — Within each hotel's cluster set, the cluster whose centroid is farthest from the hotel is scheduled first. This is a heuristic to front-load difficult travel days.
+
+---
+
+## Dependencies
+
+| Library | Purpose |
+|---|---|
+| `geopandas` | Shapefile I/O and spatial operations |
+| `networkx` | Road graph construction and shortest paths (Dijkstra) |
+| `shapely` | Geometry snapping (`project` / `interpolate`) |
+| `scikit-learn` | K-Means clustering |
+| `ortools` | TSP solver (`PATH_CHEAPEST_ARC` strategy) |
+| `scipy` | Pairwise distance matrix for cluster estimation |
+| `numpy` | Array operations |
+
+---
+
+## Limitations
+
+- Road network must be in a **projected CRS** (metres) — geographic CRS (degrees) will produce incorrect distance calculations
+- Distance matrix computation is O(N²) via Dijkstra — for very large GCP sets (500+) this will be slow
+- TSP solver uses a greedy construction heuristic (`PATH_CHEAPEST_ARC`); solutions are near-optimal but not guaranteed optimal for large day clusters
+- Hotels must be within 500 m of a road segment to be accepted
+
+---
+
+## License
+
+MIT License. See `LICENSE` for details.
+
+---
+
+## Author
+
+**Md. Nashid Kamal Sifat**  
+GEO-ICT Engineer | HawarIT, Netherlands  
+[GitHub](https://github.com/rivantesifat) · [LinkedIn](https://linkedin.com/in/nashidsifat)
