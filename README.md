@@ -38,7 +38,18 @@ Hotel locations (.shp) ──┘
 9. **Export routes** — road-following polylines exported as a shapefile with `day`, `hotel`, and `round_trip_km` attributes
 
 ---
+## Sample Output
 
+The map below shows a real routing output for a GCP survey campaign in 
+Sri Lanka — 20 survey days across two hotel bases, with road-following 
+round trips exported directly to QGIS.
+
+![Sample routing output — Sri Lanka GCP survey campaign](srilanka.png)
+
+*20 survey days (Days 0–19) optimised across Hotel A and Hotel B. 
+Each colour represents one day's road-following round trip. 
+Red diamonds indicate GCP locations.*
+```
 ## Installation
 
 ```bash
