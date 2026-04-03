@@ -3,8 +3,8 @@ from route_core import GCPRoutePlanner
 print("Starting...")
 
 planner = GCPRoutePlanner(
-    "C:/Users/HDSL47/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/gcp_routing_tool/data/roads_V2.shp",
-    "C:/Users/HDSL47/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/gcp_routing_tool/data/gcps_check.shp"
+    "C:/Users/HDSL47/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/gcp_routing_tool/gcp_routing_tool_V2/data/roads_V2.shp",
+    "C:/Users/HDSL47/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/gcp_routing_tool/gcp_routing_tool_V2/data/gcps.shp"
 )
 
 print("Loaded data")
@@ -17,6 +17,12 @@ planner.filter_roads(
 print("Filtered roads")
 
 planner.build_graph()
+planner.load_hotels( sources=[
+        r"C:/Users/HDSL47/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/gcp_routing_tool/gcp_routing_tool_V2/data/hotels/hotel_a.shp",   # or (x, y) coords
+        r"C:/Users/HDSL47/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/gcp_routing_tool/gcp_routing_tool_V2/data/hotels/hotel_b.shp",
+    ],
+    labels=["Hotel A", "Hotel B"]
+)
 print("Graph built")
 
 planner.snap_gcps()
@@ -26,6 +32,7 @@ print("Snapped GCPs")
 planner.compute_distance_matrix()
 print("Distance matrix done")
 print("Number of GCPs:", len(planner.gcps))
+planner.assign_gcps_to_hotels()
 planner.cluster_gcps(max_distance_per_day=30000)
 print("Clustering done")
 
@@ -33,7 +40,7 @@ planner.solve_routes()
 print("Routing done")
 
 planner.export_routes(
-    "C:/Users/HDSL47/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/gcp_routing_tool/data/output_routes.shp"
+    "C:/Users/HDSL47/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/gcp_routing_tool/gcp_routing_tool_V2/data/results/output_routes.shp"
 )
 
 print("Export done")
